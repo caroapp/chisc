@@ -46,7 +46,7 @@ cannot be linked back to the per-paper dump.
 5. Download the generated files. Every click of **Anonymize** draws new
    random pseudonyms, so use the files from a single run together.
 
-### Try it with the synthetic data first
+### Test data
 
 This repo includes synthetic CSV files
 (`chi26c_submission_synthetic.csv`, `chi26c_reviews_synthetic.csv`) with
