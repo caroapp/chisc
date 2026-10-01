@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>pcsanonymizer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%95%B6%3C/text%3E%3C/svg%3E">
+
+  <script src="js/d3.v5.min.js"></script>
+  <script src="js/anonymize.js"></script>
+
+  <style>
+    /* ---------- design tokens (light / dark) ---------- */
+    :root {
+      --bg: #f6f7fb;
+      --surface: #ffffff;
+      --surface-2: #f1f2f8;
+      --text: #1f2230;
+      --muted: #5c5f73;
+      --border: #dcdeea;
+      --border-strong: #b9bdd3;
+      --accent: #322dd5;          /* the blue of the previous page */
+      --accent-hover: #2723b3;
+      --accent-soft: #e8e8fb;
+      --ok: #157a43;   --ok-soft: #e0f4ea;
+      --warn: #925a00; --warn-soft: #fdf0d5;
+      --err: #b3261e;  --err-soft: #fbe4e2;
+      --radius: 14px;
+      --shadow: 0 1px 2px rgba(20, 22, 50, .06), 0 4px 16px rgba(20, 22, 50, .05);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14151d;
+        --surface: #1d1f2b;
+        --surface-2: #252838;
+        --text: #e9eaf3;
+        --muted: #a2a5bb;
+        --border: #33364a;
+        --border-strong: #4b4f69;
+        --accent: #8b87ff;
+        --accent-hover: #a5a2ff;
+        --accent-soft: #2a2a52;
+        --ok: #56d391;   --ok-soft: #173a2a;
+        --warn: #f0b95a; --warn-soft: #3d3016;
+        --err: #ff8a80;  --err-soft: #472220;
+        --shadow: none;
+      }
+    }
+
+    /* ---------- base ---------- */
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .page { max-width: 52rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+
+    header h1 { margin: 0; font-size: 2rem; letter-spacing: -.02em; }
+    header .lead { margin: .35rem 0 1rem; color: var(--muted); font-size: 1.05rem; }
+    .privacy {
+      display: flex; gap: .6rem; align-items: flex-start;
+      margin: 0; padding: .7rem .9rem;
+      background: var(--accent-soft); color: var(--text);
+      border-radius: 10px; font-size: .92rem;
+    }
+    .privacy b { white-space: nowrap; }
+
+    section { margin-top: 2.25rem; }
+    h2 {
+      display: flex; align-items: center; gap: .6rem;
+      margin: 0 0 .25rem; font-size: 1.2rem;
+    }
+    .step {
+      display: inline-grid; place-items: center;
+      width: 1.6rem; height: 1.6rem; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      font-size: .85rem; font-weight: 700;
+    }
+    @media (prefers-color-scheme: dark) { .step { color: #14151d; } }
+    .hint { margin: 0 0 1rem; color: var(--muted); font-size: .92rem; }
+
+    /* ---------- stage cards (T1, T2, T3) ---------- */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--border-strong);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1rem 1.15rem 1.15rem;
+      margin-bottom: .9rem;
+      transition: border-color .15s;
+    }
+    .card.ready { border-left-color: var(--ok); }
+    .card-head { display: flex; align-items: center; gap: .7rem; margin-bottom: .8rem; }
+    .badge {
+      padding: .1rem .55rem; border-radius: 6px;
+      background: var(--surface-2); color: var(--accent);
+      font-weight: 700; font-size: .85rem; letter-spacing: .02em;
+    }
+    .card-head h3 { margin: 0; font-size: 1rem; font-weight: 600; flex: 1; }
+    .card-state { font-size: .82rem; color: var(--muted); }
+    .card.ready .card-state { color: var(--ok); font-weight: 600; }
+    .card.ready .card-state::before { content: "\2713\00a0"; }
+
+    /* The script fills these containers with:  label, file input, label, file input, message */
+    .stage-body {
+      display: grid;
+      grid-template-columns: 7.5rem 1fr;
+      gap: .6rem 1rem;
+      align-items: center;
+    }
+    .stage-body .textEl { color: var(--muted); font-weight: 600; font-size: .92rem; }
+    .stage-body [id^="progressMsgT"] { grid-column: 1 / -1; font-weight: 400; }
+    @media (max-width: 560px) {
+      .stage-body { grid-template-columns: 1fr; gap: .25rem; }
+      .stage-body input[type=file] { margin-bottom: .6rem; }
+    }
+
+    input[type=file] {
+      width: 100%; padding: .55rem .7rem;
+      border: 1.5px dashed var(--border-strong); border-radius: 10px;
+      background: var(--surface-2); color: var(--muted);
+      font: inherit; font-size: .9rem; cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    input[type=file]:hover { border-color: var(--accent); }
+    input[type=file]::file-selector-button {
+      margin-right: .8rem; padding: .35rem .8rem;
+      border: 1px solid var(--border-strong); border-radius: 8px;
+      background: var(--surface); color: var(--text);
+      font: inherit; font-size: .88rem; cursor: pointer;
+    }
+    input[type=file]::file-selector-button:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ---------- run ---------- */
+    .run { display: flex; align-items: center; flex-wrap: wrap; gap: .9rem; }
+    button {
+      font: inherit; cursor: pointer;
+      border-radius: 10px; border: 1px solid transparent;
+    }
+    button:focus-visible, input:focus-visible, a:focus-visible {
+      outline: 3px solid var(--accent); outline-offset: 2px;
+    }
+    #gobutton {
+      padding: .7rem 1.8rem; font-weight: 600; font-size: 1.05rem;
+      background: var(--accent); color: #fff;
+    }
+    @media (prefers-color-scheme: dark) { #gobutton { color: #14151d; } }
+    #gobutton:hover:not(:disabled) { background: var(--accent-hover); }
+    #gobutton:disabled { background: var(--surface-2); color: var(--muted); cursor: not-allowed; border-color: var(--border); }
+    .run .hint { margin: 0; }
+
+    /* ---------- results ---------- */
+    .result {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 1rem 1.15rem 1.15rem; margin-bottom: .9rem;
+    }
+    .result-head { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem .8rem; margin-bottom: .2rem; }
+    .result-head h3 { margin: 0; font-size: 1rem; font-weight: 600; flex: 1; min-width: 14rem; }
+    .result .hint { margin: 0 0 .8rem; }
+    .ghost {
+      padding: .35rem .85rem; font-size: .88rem;
+      background: transparent; color: var(--accent); border-color: var(--border-strong);
+    }
+    .ghost:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+    .files { display: flex; flex-direction: column; gap: .4rem; }
+    .files:empty::before {
+      content: "Nothing yet.";
+      color: var(--muted); font-size: .9rem; font-style: italic;
+    }
+    .dump-item { display: block; }
+    a.dump {
+      display: flex; align-items: center; gap: .6rem;
+      padding: .5rem .75rem; border-radius: 9px;
+      border: 1px solid var(--border); background: var(--surface-2);
+      color: var(--text); text-decoration: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9rem;
+      overflow-wrap: anywhere;
+    }
+    a.dump::before { content: "\2193"; color: var(--accent); font-weight: 700; font-family: system-ui, sans-serif; }
+    a.dump:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+    /* ---------- status pills (the script writes plain text into these spans) ---------- */
+    [data-state] {
+      display: inline-flex; align-items: center; gap: .45rem;
+      padding: .2rem .7rem; border-radius: 999px;
+      font-size: .85rem; font-weight: 500;
+    }
+    [data-state]:empty { display: none; }
+    [data-state="running"] { background: var(--accent-soft); color: var(--accent); }
+    [data-state="done"]    { background: var(--ok-soft);   color: var(--ok); }
+    [data-state="warn"]    { background: var(--warn-soft); color: var(--warn); }
+    [data-state="error"]   { background: var(--err-soft);  color: var(--err); }
+    [data-state="running"]::before {
+      content: ""; width: .8em; height: .8em; border-radius: 50%;
+      border: 2px solid currentColor; border-right-color: transparent;
+      animation: spin .8s linear infinite;
+    }
+    [data-state="done"]::before  { content: "\2713"; }
+    [data-state="warn"]::before  { content: "!"; font-weight: 700; }
+    [data-state="error"]::before { content: "\2715"; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { [data-state="running"]::before { animation: none; } }
+
+    #fatal {
+      margin: 1rem 0 0; padding: .8rem 1rem; border-radius: 10px;
+      background: var(--err-soft); color: var(--err);
+    }
+  </style>
+</head>
+
+<body>
+<main class="page">
+
+  <header>
+    <h1>pcsanonymizer</h1>
+    <p class="lead">Pseudonymize PCS submission and review exports.</p>
+    <p class="privacy"><b>Stays on your machine.</b>
+      <span>The CSV files are read locally by your browser. Nothing is uploaded, and the real-to-pseudonym mapping is never saved.</span></p>
+    <p id="fatal" hidden>The page could not start: <code>js/d3.v5.min.js</code> or <code>js/anonymize.js</code> failed to load. Check that the <code>js</code> folder sits next to this file.</p>
+  </header>
+
+  <!-- ============ 1. inputs ============ -->
+  <section aria-labelledby="h-load">
+    <h2 id="h-load"><span class="step">1</span> Load the exports</h2>
+    <p class="hint">For each stage, choose (or drop) the submissions CSV and the reviews CSV. Stages without both files are skipped.</p>
+
+    <!-- The #mainT1 / #mainT2 / #mainT3 containers are filled by anonymize.js. -->
+    <div class="card" data-stage="T1">
+      <div class="card-head"><span class="badge">T1</span><h3>Reviews released to authors (round 1)</h3><span class="card-state">No files</span></div>
+      <div id="mainT1" class="stage-body"></div>
+    </div>
+
+    <div class="card" data-stage="T2">
+      <div class="card-head"><span class="badge">T2</span><h3>Day before PC meeting</h3><span class="card-state">No files</span></div>
+      <div id="mainT2" class="stage-body"></div>
+    </div>
+
+    <div class="card" data-stage="T3">
+      <div class="card-head"><span class="badge">T3</span><h3>Reviews released to authors (round 2)</h3><span class="card-state">No files</span></div>
+      <div id="mainT3" class="stage-body"></div>
+    </div>
+  </section>
+
+  <!-- ============ 2. run ============ -->
+  <section aria-labelledby="h-run">
+    <h2 id="h-run"><span class="step">2</span> Anonymize</h2>
+    <div class="run">
+      <button id="gobutton" type="button" disabled>Anonymize</button>
+      <p class="hint" id="goHint">Load both files for at least one stage.</p>
+    </div>
+  </section>
+
+  <!-- ============ 3. results ============ -->
+  <section aria-labelledby="h-out">
+    <h2 id="h-out"><span class="step">3</span> Download</h2>
+    <p class="hint">Every run draws new random pseudonyms: use the files of a single run together, and don't mix them with files from an earlier run.</p>
+
+    <div class="result">
+      <div class="result-head">
+        <h3>Anonymized submissions and reviews tables</h3>
+        <span id="progressMsg"></span>
+        <button type="button" class="ghost" data-download-all="main" hidden>Download all</button>
+      </div>
+      <p class="hint">One pseudonymized CSV per stage.</p>
+      <div id="main" class="files"></div>
+    </div>
+
+    <div class="result">
+      <div class="result-head">
+        <h3>Anonymized analysis of authored vs reviewed loads</h3>
+        <span id="progressMsg_arl"></span>
+        <button type="button" class="ghost" data-download-all="main_arl" hidden>Download all</button>
+      </div>
+      <p class="hint">Counts per anonymous person, plus author/reviewer matrices. Computed from the stage set as <code>arlTimeStamp</code> in <code>anonymize.js</code> (T1 by default).</p>
+      <div id="main_arl" class="files"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+/*
+ * Page behaviour only. All the data processing lives in js/anonymize.js,
+ * which needs these ids: gobutton, main, main_arl, progressMsg, progressMsg_arl,
+ * and one main<T> container per timestamp.
+ */
+(function () {
+  "use strict";
+  var $  = function (s, root) { return (root || document).querySelector(s); };
+  var $$ = function (s, root) { return Array.prototype.slice.call((root || document).querySelectorAll(s)); };
+
+  window.addEventListener("load", function () {
+    if (typeof createScene !== "function" || typeof d3 === "undefined") {
+      $("#fatal").hidden = false;
+      return;
+    }
+    createScene();          // builds the file pickers and wires the Go button
+    setupStages();
+    setupStatusPills();
+    setupDownloadAll();
+  });
+
+  /* Card state + Go button enabled only when a stage has both files. */
+  function setupStages() {
+    var go = $("#gobutton"), hint = $("#goHint");
+    var cards = $$(".card[data-stage]");
+
+    function refresh() {
+      var ready = 0;
+      cards.forEach(function (card) {
+        var inputs = $$("input[type=file]", card);
+        var chosen = inputs.filter(function (i) { return i.files && i.files.length; }).length;
+        var isReady = inputs.length > 0 && chosen === inputs.length;
+        card.classList.toggle("ready", isReady);
+        $(".card-state", card).textContent = isReady ? "Ready" : chosen ? chosen + " of " + inputs.length + " files" : "No files";
+        if (isReady) ready++;
+      });
+      go.disabled = ready === 0;
+      hint.textContent = ready === 0
+        ? "Load both files for at least one stage."
+        : ready + " of " + cards.length + " stages ready.";
+    }
+
+    cards.forEach(function (card) {
+      $$("input[type=file]", card).forEach(function (input) {   // accessible names for the script-made inputs
+        var label = input.previousElementSibling;
+        input.setAttribute("aria-label", card.dataset.stage + " " + (label ? label.textContent.replace(":", "").trim() : "file"));
+      });
+      card.addEventListener("change", refresh);
+    });
+    refresh();
+  }
+
+  /* The script writes plain text ("in progress...", "Done.", ...) into the message spans: turn it into a state. */
+  function setupStatusPills() {
+    function classify(t) {
+      if (!t) return "";
+      if (/in progress/i.test(t)) return "running";
+      if (/^done/i.test(t)) return "done";
+      if (/error/i.test(t)) return "error";
+      return "warn";                                            // skipped reviews, missing files, ...
+    }
+    $$("#progressMsg, #progressMsg_arl, [id^=progressMsgT]").forEach(function (el) {
+      function update() {
+        var s = classify(el.textContent.trim());
+        if (s) el.setAttribute("data-state", s); else el.removeAttribute("data-state");
+      }
+      new MutationObserver(update).observe(el, { childList: true, characterData: true, subtree: true });
+      update();
+    });
+  }
+
+  /* "Download all": clicks each generated link in turn (browsers may ask to allow multiple downloads). */
+  function setupDownloadAll() {
+    $$("[data-download-all]").forEach(function (btn) {
+      var box = document.getElementById(btn.getAttribute("data-download-all"));
+      function sync() { btn.hidden = !$("a.dump", box); }
+      new MutationObserver(sync).observe(box, { childList: true, subtree: true });
+      sync();
+      btn.addEventListener("click", function () {
+        $$("a.dump", box).forEach(function (a, i) { setTimeout(function () { a.click(); }, i * 350); });
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
