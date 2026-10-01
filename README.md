@@ -54,7 +54,7 @@ realistic but entirely fake data: 500 papers, 2,500 reviews, fake names and
 `@example.org` emails. Column headers for these synthetic datasets come from
 the PCS configuration for CHI '26.
 
-## Repo structure
+### Repo structure
 
 ```
 .
