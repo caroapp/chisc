@@ -59,7 +59,7 @@ the PCS configuration for CHI '26.
 ```
 .
 ├── pcs_pseudonymizer/
-│   ├── index.html                      # all the processing logic + its configuration
+│   ├── index.html                     
 │   └── js/
 │       ├── anonymize.js                    # all the processing logic + its configuration
 │       └── d3.v5.min.js                    # d3 v5, used to parse the CSVs
