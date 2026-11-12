@@ -61,8 +61,7 @@ This repo includes synthetic CSV files with realistic but entirely fake data:
 │       ├── anonymize.js                    # all the processing logic + its configuration
 │       └── d3.v5.min.js                    # d3 v5, used to parse the CSVs
 ├── synthetic_data/
-│   ├── chi26c_submission_synthetic.csv     # synthetic test data (submissions)
-│   └── chi26c_reviews_synthetic.csv        # synthetic test data (reviews)
+│   ├── ...
 ```
 
 ### Adapting it to a different PCS export
