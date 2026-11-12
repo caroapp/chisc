@@ -3,11 +3,11 @@
  * ============================================================================
  * Pseudonymizes conference submission / review exports, in the browser.
  * Nothing is uploaded anywhere: the CSV files are read locally through
- * FileReader and processed with d3.csv.
+ * FileReader and parsed with d3 (d3.text + d3.csvParseRows).
  *
- * INPUT  (one pair of CSV files per "timestamp" = a stage of the review process,
- *         e.g. T1 reviews released to authors (round 1), T2 day before the PC
- *         meeting, T3 reviews released to authors (round 2))
+ * INPUT  (one pair of CSV files per "timestamp" = a stage of the review process.
+ *         CHI 2027: T1 = reviews released to authors (round 1),
+ *                   T2 = reviews released to authors (round 2))
  *   - a submissions dump   (one row per paper)
  *   - a reviews dump       (one row per review / per reviewer assignment)
  *
@@ -28,7 +28,10 @@
  * HOW TO ADAPT IT (everything below is in CONFIG)
  *   - A source column was renamed     -> edit its `from` list (see below).
  *   - Same column, different name across stages/years -> list both names in `from`;
- *                                        the first one present in the file wins.
+ *                                        the first NON-EMPTY one wins.
+ *   - Two columns with the SAME name in the export -> the loader renames the 2nd,
+ *                                        3rd... to "<name> [2]", "<name> [3]" and logs
+ *                                        a warning; list them all in `from`.
  *   - Collect one more column per reviewer -> add a field to F, then reference it
  *                                        in reviews.slotFields (and firstAcFields).
  *   - Collect one more column per paper    -> add a line to submissions.fields.
@@ -57,21 +60,28 @@
    */
   const F = {
     score:           { header: "{slot} " + scoreLabel,           from: [scoreLabel] },
-    // Bug fix: the original code wrote "... Review quality" but the header said
-    // "... Review Quality", so this column was always empty. Now both agree.
+    // "Review quality" was written "Review Quality" in some exports: both accepted.
     quality:         { header: "{slot} Review Quality",          from: ["Review quality", "Review Quality"] },
     expertise:       { header: "{slot} Expertise",               from: ["Expertise"] },
-    // 2024: the chairs reworked the form between the two rounds, hence "(Round 1)" variants.
+
+    // CHI 2027 criteria (replace Originality / Significance / Research Quality of CHI 2026).
     originality:     { header: "{slot} Originality",             from: ["Originality (Round 1)", "Originality"] },
-    significance:    { header: "{slot} Significance",            from: ["Significance (Round 1)", "Significance"] },
-    // "Rigor" disappeared compared to 2023 and was replaced by "Research Quality".
-    researchQuality: { header: "{slot} Research Quality",        from: ["Research Quality (Round 1)", "Research Quality"] },
-    recommendation:  { header: "{slot} Recommendation",          from: ["Recommendation (Round 1)", "Recommendation"] },
+    correctness:     { header: "{slot} Correctness",             from: ["Correctness (Round 1)", "Correctness"] },
+    novelty:         { header: "{slot} Novelty",                 from: ["Novelty (Round 1)", "Novelty"] },
+    importance:      { header: "{slot} Importance",              from: ["Importance (Round 1)", "Importance"] },
+    clarity:         { header: "{slot} Clarity of Exposition",   from: ["Clarity of Exposition (Round 1)", "Clarity of Exposition"] },
+
+    // The CHI27 export has TWO columns named "Recommendation (Round 1)" (the second one
+    // is read as "... [2]"). => Caroline has asked the paper chairs for clarifying this
+    recommendation:  { header: "{slot} Recommendation",          from: ["Recommendation (Round 1)", "Recommendation (Round 1) [2]", "Recommendation"] },
     reviewLength:    { header: "{slot} Review Length",           from: ["Review (Round 1)", "Review"], as: "length" },
     reReviewLength:  { header: "{slot} re-Review Length",        from: ["Re-review"], as: "length" },
+
     originality2:    { header: "{slot} Originality (Round 2)",   from: ["Originality (Round 2)"] },
-    significance2:   { header: "{slot} Significance (Round 2)",  from: ["Significance (Round 2)"] },
-    researchQuality2:{ header: "{slot} Research Quality (Round 2)", from: ["Research Quality (Round 2)"] },
+    correctness2:    { header: "{slot} Correctness (Round 2)",   from: ["Correctness (Round 2)"] },
+    novelty2:        { header: "{slot} Novelty (Round 2)",       from: ["Novelty (Round 2)"] },
+    importance2:     { header: "{slot} Importance (Round 2)",    from: ["Importance (Round 2)"] },
+    clarity2:        { header: "{slot} Clarity of Exposition (Round 2)", from: ["Clarity of Exposition (Round 2)"] },
     recommendation2: { header: "{slot} Recommendation (Round 2)",   from: ["Recommendation (Round 2)"] },
   };
 
@@ -79,12 +89,12 @@
     // Stages of the review process at which you export the data. Each one gets a
     // "Submissions" and a "Reviews" file picker, and the page needs a matching
     // <div id="mainT1"> container. Examples: ["T1"], ["T1","T2"], ["T1",...,"T6"].
-    timeStamps: ["T1", "T2", "T3"],
+    // CHI 2027: T1 = reviews released to authors (round 1), T2 = (round 2).
+    timeStamps: ["T1", "T2"],
 
     // Which timestamp feeds the authored-vs-reviewed counts.
-    // NOTE: the original code used the FIRST one for both files, although two
-    // stale comments claimed "last" for the reviews. Set it to your last
-    // timestamp if that is what you want.
+    // Keep T1 (round 1): the RR / RejectRound1 split below relies on the ROUND-1
+    // decision labels, which the round-2 export may have replaced by final ones.
     arlTimeStamp: "T1",
 
     // TODO each year: check the label of the decision "go for round 2" (RR by default).
@@ -101,13 +111,14 @@
       fields: [
         { header: "Decision",                         from: ["Decision"] },
         { header: "Overall Score",                    from: ["Overall Score"] },
-        // CHI26 header only has the "Revised ..." variant of this column.
+        // CHI26 only had the "Revised ..." variant of this column; CHI27 has the plain one.
         { header: "PDF page count",                   from: ["Full Text Paper Submission (PDF) pages", "Revised Full Text Paper Submission (PDF) pages"] },
         { header: "Paper length category",            from: ["Paper Length"] },
-        // 2024 -> 2025: "Abstract" became "Submission Abstract" (both accepted now).
-        { header: "Abstract Length (in char)",        from: ["Abstract", "Submission Abstract"], as: "length" },
-        { header: "Primary Subcommittee Selection",   from: ["Primary Subcommittee Selection"] },
-        { header: "Secondary Subcommittee Selection", from: ["Secondary Subcommittee Selection"] },
+        { header: "Abstract Length (in char)",        from: ["Submission Abstract", "Abstract"], as: "length" },
+        // CHI27: one column replaces the Primary / Secondary subcommittee selections.
+        { header: "Subcommittee Assignment",          from: ["subcommittee-assignment"] },
+        // Author-chosen keywords, exported as is (for clustering). "Key Words" in CHI26.
+        { header: "Keywords",                         from: ["Keywords", "Key Words"] },
       ],
     },
 
@@ -124,30 +135,24 @@
       maxAcSlots: 4,                // 1AC..4AC  (reviews beyond that are skipped, with a warning)
       maxExternalSlots: 8,          // E1..E8    (idem)
 
-      // Fields exported for every slot except 1AC.
+      // Fields exported for every reviewer slot.
       slotFields: [
-        F.score, F.quality, F.expertise, F.originality, F.significance,
-        F.researchQuality, F.recommendation, F.reviewLength, F.reReviewLength,
-        F.originality2, F.significance2, F.researchQuality2, F.recommendation2,
+        F.score, F.quality, F.expertise,
+        F.originality, F.correctness, F.novelty, F.importance, F.clarity,
+        F.recommendation, F.reviewLength, F.reReviewLength,
+        F.originality2, F.correctness2, F.novelty2, F.importance2, F.clarity2,
+        F.recommendation2,
       ],
 
-      // Fields exported for the 1AC only (the 1AC also writes the meta-review).
-      // Headers without "{slot}" are paper-level columns.
+      // The 1AC exports the same fields, plus the meta-review and the required changes.
+      // Headers without "{slot}" are paper-level columns. In CHI27 these columns no
+      // longer carry a "1AC: " prefix (CHI26: "1AC: The Meta-Review", ...).
       firstAcFields: [
-        F.score, F.quality, F.expertise, F.originality, F.significance, F.researchQuality,
-        // 2024 -> 2025: "1AC: Recommendation" became "1AC: Recommendation (Round 1)".
-        { header: "{slot} Recommendation (Round 1)", from: ["1AC: Recommendation (Round 1)", "1AC: Recommendation"] },
-        F.reviewLength, F.reReviewLength,
-        // Value is a LENGTH despite the name. Duplicated further down as "... Length".
-        // Kept so the output schema stays unchanged; delete one of the two if unwanted.
-        { header: "1AC: The Summary of Revisions Required", from: ["1AC: The Summary of Revisions Required"], as: "length" },
-        F.originality2, F.significance2, F.researchQuality2,
-        { header: "{slot} Recommendation (Round 2)", from: ["1AC: Recommendation (Round 2)"] },
-        { header: "The Meta-Review Length",          from: ["1AC: The Meta-Review"], as: "length" },
-        { header: "The Meta-Review Length (Round 2)", from: ["1AC: The Meta-Review (Round 2)"], as: "length" },
-        { header: "1AC: The Summary of Revisions Required Length", from: ["1AC: The Summary of Revisions Required"], as: "length" },
-        // Same value as "1AC Recommendation (Round 2)" above (kept for the same reason).
-        { header: "1AC: Recommendation (Round 2)",   from: ["1AC: Recommendation (Round 2)"] },
+        // (same list as slotFields, then:)
+        "SLOT_FIELDS",
+        { header: "The Meta-Review Length",             from: ["The Meta-Review", "1AC: The Meta-Review"], as: "length" },
+        { header: "The Meta-Review Length (Round 2)",   from: ["The Meta-Review (Round 2)", "1AC: The Meta-Review (Round 2)"], as: "length" },
+        { header: "Required Changes Length",            from: ["Required Changes", "1AC: The Summary of Revisions Required"], as: "length" },
       ],
     },
 
@@ -156,12 +161,16 @@
       // Set to false ONLY for debugging: adds a column with the real e-mail addresses.
       anonymous: true,
       authorEmailCol: "Author {n} - email",
-      authorCount: 46,                       // Author 1..46 (the CHI26 export goes up to "Author 46")
+      // The number of "Author n - email" columns is detected from the file itself.
       columns: ["anonymousID", "CountAuthored", "CountReviewed", "Role"],
       pcRoleIncludes: "AC",                  // role containing this => "PC member"
       labels: { pc: "PC member", reviewer: "Reviewer", none: "none" },
     },
   };
+
+  // Expand the "SLOT_FIELDS" placeholder of firstAcFields into the slotFields list.
+  CONFIG.reviews.firstAcFields = CONFIG.reviews.firstAcFields.reduce(
+    (acc, f) => acc.concat(f === "SLOT_FIELDS" ? CONFIG.reviews.slotFields : [f]), []);
 
   const S = CONFIG.submissions;
   const R = CONFIG.reviews;
@@ -205,9 +214,60 @@
 
   /** Reads one configured field from a CSV row (see F for the field format). */
   function readField(row, field) {
-    const col = field.from.find(c => Object.prototype.hasOwnProperty.call(row, c));
-    const raw = col === undefined ? undefined : row[col];
+    // First NON-EMPTY candidate wins; if all existing candidates are empty, the first one.
+    let raw;
+    for (const c of field.from) {
+      if (!Object.prototype.hasOwnProperty.call(row, c)) continue;
+      if (raw === undefined) raw = row[c];
+      if (trimmed(row[c]) !== "") { raw = row[c]; break; }
+    }
     return field.as === "length" ? countChars(raw) : raw;
+  }
+
+  /**
+   * Makes header names unique: the 2nd, 3rd... column called "X" become "X [2]", "X [3]".
+   * (d3.csv would silently keep only the LAST of several identically named columns.)
+   */
+  const warnedDuplicates = new Set();   // warn once per column name, not once per file
+  function uniqueHeader(header) {
+    const seen = new Map();
+    const renamed = [];
+    const out = header.map(h => {
+      const n = (seen.get(h) || 0) + 1;
+      seen.set(h, n);
+      if (n === 1) return h;
+      renamed.push(h);
+      return h + " [" + n + "]";
+    });
+    const fresh = Array.from(new Set(renamed)).filter(h => !warnedDuplicates.has(h));
+    if (fresh.length) {
+      fresh.forEach(h => warnedDuplicates.add(h));
+      console.warn("Duplicate column names, renamed with a suffix: " + fresh.map(h => "'" + h + "'").join(", "));
+    }
+    return out;
+  }
+
+  /** Loads a CSV (URL or data URL) as an array of {column: value} objects, like d3.csv. */
+  function loadCsv(url) {
+    return d3.text(url).then(text => {
+      const rows = d3.csvParseRows(text.replace(/^\uFEFF/, ""));   // also drops a BOM
+      const header = uniqueHeader(rows.shift() || []);
+      return rows.map(r => {
+        const o = {};
+        header.forEach((h, i) => { o[h] = r[i] === undefined ? "" : r[i]; });
+        return o;
+      });
+    });
+  }
+
+  /** "Author {n} - email" columns present in the file, ordered by n. */
+  function detectAuthorCols(rows) {
+    if (rows.length === 0) return [];
+    const esc = A.authorEmailCol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("\\{n\\}", "(\\d+)");
+    const pattern = new RegExp("^" + esc + "$");
+    const byNumber = new Map();
+    Object.keys(rows[0]).forEach(k => { const m = pattern.exec(k); if (m) byNumber.set(+m[1], k); });
+    return Array.from(byNumber.keys()).sort((a, b) => a - b).map(n => byNumber.get(n));
   }
 
   /** "{slot} Foo" -> "2AC Foo" */
@@ -360,8 +420,8 @@
    * @returns {{filename: string, csv: string}[]} in the order they should be listed
    */
   function buildAuthoredVsReviewed(subsRows, revsRows) {
-    const authorCols = [];
-    for (let n = 1; n <= A.authorCount; n++) authorCols.push(A.authorEmailCol.replace("{n}", n));
+    const authorCols = detectAuthorCols(subsRows);
+    if (authorCols.length === 0) console.warn("No '" + A.authorEmailCol + "' column found in the submissions file.");
 
     const completeSubs = subsRows.filter(s => s[S.statusCol] === S.completeValue);
 
@@ -449,7 +509,7 @@
   const files = {};
 
   function loadCsvPair(t) {
-    return Promise.all([d3.csv(files[t].subs), d3.csv(files[t].revs)])
+    return Promise.all([loadCsv(files[t].subs), loadCsv(files[t].revs)])
       .then(([subs, revs]) => ({ subs, revs }));
   }
 

@@ -49,7 +49,7 @@ cannot be linked back to the per-paper dump.
 ### Test data
 
 This repo includes synthetic CSV files
-(`chi26c_submission_synthetic.csv`, `chi26c_reviews_synthetic.csv`) with
+(`chi27c_submission_synthetic.csv`, `chi27c_reviews_synthetic.csv`) with
 realistic but entirely fake data: 500 papers, 2,500 reviews, fake names and
 `@example.org` emails. Column headers for these synthetic datasets come from
 the PCS configuration for CHI '26.

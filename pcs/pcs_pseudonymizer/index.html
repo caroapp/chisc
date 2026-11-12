@@ -83,7 +83,7 @@
     @media (prefers-color-scheme: dark) { .step { color: #14151d; } }
     .hint { margin: 0 0 1rem; color: var(--muted); font-size: .92rem; }
 
-    /* ---------- stage cards (T1, T2, T3) ---------- */
+    /* ---------- stage cards (T1, T2) ---------- */
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -231,20 +231,16 @@
     <h2 id="h-load"><span class="step">1</span> Load the exports</h2>
     <p class="hint">For each stage, choose (or drop) the submissions CSV and the reviews CSV. Stages without both files are skipped.</p>
 
-    <!-- The #mainT1 / #mainT2 / #mainT3 containers are filled by anonymize.js. -->
+    <!-- The #mainT1 / #mainT2 containers are filled by anonymize.js
+         (they must match `timeStamps` in its CONFIG). -->
     <div class="card" data-stage="T1">
       <div class="card-head"><span class="badge">T1</span><h3>Reviews released to authors (round 1)</h3><span class="card-state">No files</span></div>
       <div id="mainT1" class="stage-body"></div>
     </div>
 
     <div class="card" data-stage="T2">
-      <div class="card-head"><span class="badge">T2</span><h3>Day before PC meeting</h3><span class="card-state">No files</span></div>
+      <div class="card-head"><span class="badge">T2</span><h3>Reviews released to authors (round 2)</h3><span class="card-state">No files</span></div>
       <div id="mainT2" class="stage-body"></div>
-    </div>
-
-    <div class="card" data-stage="T3">
-      <div class="card-head"><span class="badge">T3</span><h3>Reviews released to authors (round 2)</h3><span class="card-state">No files</span></div>
-      <div id="mainT3" class="stage-body"></div>
     </div>
   </section>
 
