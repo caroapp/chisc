@@ -116,9 +116,11 @@
         { header: "Paper length category",            from: ["Paper Length"] },
         { header: "Abstract Length (in char)",        from: ["Submission Abstract", "Abstract"], as: "length" },
         // CHI27: one column replaces the Primary / Secondary subcommittee selections.
-        { header: "Subcommittee Assignment",          from: ["subcommittee-assignment"] },
-        // Author-chosen keywords, exported as is (for clustering). "Key Words" in CHI26.
+        { header: "Subcommunity Assignment",          from: ["subcommittee-assignment"] },
+        // Author-chosen keywords, exported as is (for clustering). It used to be "Key Words" until CHI26.
         { header: "Keywords",                         from: ["Keywords", "Key Words"] },
+        { header: "First author - country",           from: ["Author 1 - country 1"] },
+        { header: "Number of authors",         compute: row => detectAuthorCols([row]).filter(c => trimmed(row[c]) !== "").length }
       ],
     },
 
@@ -214,6 +216,7 @@
 
   /** Reads one configured field from a CSV row (see F for the field format). */
   function readField(row, field) {
+    if (typeof field.compute === "function") return field.compute(row);
     // First NON-EMPTY candidate wins; if all existing candidates are empty, the first one.
     let raw;
     for (const c of field.from) {
